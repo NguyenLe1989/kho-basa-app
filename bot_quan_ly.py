@@ -1,25 +1,32 @@
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 import streamlit as st
 import re
 
 class HeThongKhoBasa:
     def __init__(self):
-        print("🤖 Bot Quản Lý đang khởi động...")
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        print("🤖 Bot Quản Lý đang kết nối Google Sheet...")
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
         
-        # Tự động lấy key từ Streamlit Secrets khi chạy online
+        # 1. Kết nối qua Streamlit Secrets khi chạy Online
         if hasattr(st, "secrets") and "gcp_service_account" in st.secrets:
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(dict(st.secrets["gcp_service_account"]), scope)
+            secret_dict = dict(st.secrets["gcp_service_account"])
+            if "private_key" in secret_dict:
+                secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
+            creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
         else:
-            creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
+            # 2. Kết nối bằng file local khi chạy trên máy tính
+            creds = Credentials.from_service_account_file("service_account.json", scopes=scopes)
             
         self.client = gspread.authorize(creds)
         self.doc = self.client.open("KHO_THUY_SAN_BASA")
         self.ton_kho_sheet = self.doc.worksheet("TON_KHO")
         self.log_sheet = self.doc.worksheet("NHAT_KY_NHAP_XUAT")
-        print("✅ Bot đã sẵn sàng nhận lệnh!\n" + "="*40)
+        print("✅ Kết nối cơ sở dữ liệu thành công!")
 
     def thuc_thi_lenh(self, cau_lenh):
         cau_lenh_lower = cau_lenh.lower()
@@ -30,11 +37,11 @@ class HeThongKhoBasa:
         elif "xuất" in cau_lenh_lower:
             hinh_thuc = "XUAT"
         else:
-            return "❌ Bot không hiểu lệnh. Bạn cần có chữ 'Nhập' hoặc 'Xuất'."
+            return "❌ Bot không hiểu lệnh. Cần có từ khóa 'Nhập' hoặc 'Xuất'."
 
         so_luong_tim_thay = re.findall(r'\d+', cau_lenh)
         if not so_luong_tim_thay:
-            return "❌ Bot không thấy số lượng trong câu lệnh."
+            return "❌ Không tìm thấy số lượng trong câu lệnh."
         so_luong = float(so_luong_tim_thay[0])
 
         danh_sach_vt = self.ton_kho_sheet.get_all_records()
@@ -61,7 +68,7 @@ class HeThongKhoBasa:
                     vat_tu_match = row; break
 
         if not vat_tu_match:
-            return f"❌ Bot không tìm thấy mặt hàng nào phù hợp với câu lệnh: '{cau_lenh}'"
+            return f"❌ Không tìm thấy mặt hàng phù hợp với: '{cau_lenh}'"
 
         ton_dau = float(vat_tu_match['Tồn Đầu'])
         tong_nhap = float(vat_tu_match['Tổng Nhập'])
@@ -89,7 +96,7 @@ class HeThongKhoBasa:
         self.log_sheet.append_row([
             thoi_gian, hinh_thuc, vat_tu_match['Mã VT'], vat_tu_match['Tên Mặt Hàng'],
             vat_tu_match['Danh Mục'], so_luong, vat_tu_match['ĐVT'], 
-            "Người dùng qua Web", "Thủ Kho Bot", cau_lenh
+            "Web App", "Thủ Kho Bot", cau_lenh
         ])
 
-        return f"✅ Đã {hinh_thuc} {so_luong} {vat_tu_match['ĐVT']} [{vat_tu_match['Tên Mặt Hàng']}]. Tồn cuối mới: {ton_cuoi_moi}"
+        return f"✅ Đã {hinh_thuc} {so_luong} {vat_tu_match['ĐVT']} [{vat_tu_match['Tên Mặt Hàng']}]. Tồn kho mới: {ton_cuoi_moi}"
