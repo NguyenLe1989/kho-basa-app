@@ -3,6 +3,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import streamlit as st
 import json
+import base64
 import os
 import re
 
@@ -16,24 +17,20 @@ class HeThongKhoBasa:
         
         creds = None
         
-        # 1. Đọc file cục bộ khi chạy trên máy tính
-        if os.path.exists("service_account.json"):
-            creds = Credentials.from_service_account_file("service_account.json", scopes=scopes)
-        else:
-            # 2. Đọc từ Streamlit Secrets khi chạy online
+        # 1. Đọc từ Streamlit Secrets khi chạy Online (Giải mã chuỗi 1 dòng chuẩn xác 100%)
+        if hasattr(st, "secrets") and "gcp_b64" in st.secrets:
             try:
-                if "gcp_json" in st.secrets:
-                    secret_dict = json.loads(st.secrets["gcp_json"])
-                    creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
-                elif "gcp_service_account" in st.secrets:
-                    secret_dict = dict(st.secrets["gcp_service_account"])
-                    if "private_key" in secret_dict:
-                        secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
-                    creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
+                raw_bytes = base64.b64decode(st.secrets["gcp_b64"].strip())
+                secret_dict = json.loads(raw_bytes.decode('utf-8'))
+                creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
             except Exception as e:
-                print(f"Lỗi đọc secrets: {e}")
+                print(f"Lỗi giải mã Base64 Secrets: {e}")
 
-        if not creds:
+        # 2. Đọc file local khi chạy trên máy tính
+        if creds is None and os.path.exists("service_account.json"):
+            creds = Credentials.from_service_account_file("service_account.json", scopes=scopes)
+            
+        if creds is None:
             raise Exception("Không tìm thấy thông tin xác thực Google Service Account!")
             
         self.client = gspread.authorize(creds)
@@ -88,11 +85,11 @@ class HeThongKhoBasa:
         tong_nhap = float(vat_tu_match['Tổng Nhập'])
         tong_xuat = float(vat_tu_match['Tổng Xuất'])
         ton_toi_thieu = float(vat_tu_match['Tồn Tối Thiểu'])
-        ton_cuoi_hien_tai = ton_dau + tong_nhap - ton_xuat
+        ton_cuoi_hien_tai = ton_dau + tong_nhap - tong_xuat
 
         if hinh_thuc == "NHAP":
             tong_nhap += so_luong
-            ton_cuoi_moi = ton_dau + tong_nhap - ton_xuat
+            ton_cuoi_moi = ton_dau + tong_nhap - tong_xuat
         else:
             if ton_cuoi_hien_tai < so_luong:
                 return f"⚠️ TỪ CHỐI XUẤT: Trong kho chỉ còn {ton_cuoi_hien_tai} {vat_tu_match['ĐVT']} {vat_tu_match['Tên Mặt Hàng']}."
