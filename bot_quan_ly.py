@@ -2,6 +2,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import streamlit as st
+import json
 import re
 
 class HeThongKhoBasa:
@@ -12,14 +13,17 @@ class HeThongKhoBasa:
             "https://www.googleapis.com/auth/drive"
         ]
         
-        # 1. Kết nối qua Streamlit Secrets khi chạy Online
-        if hasattr(st, "secrets") and "gcp_service_account" in st.secrets:
+        # 1. Tự động đọc nguyên bản JSON từ Streamlit Secrets khi chạy Online
+        if hasattr(st, "secrets") and "raw_json" in st.secrets:
+            secret_dict = json.loads(st.secrets["raw_json"])
+            creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
+        elif hasattr(st, "secrets") and "gcp_service_account" in st.secrets:
             secret_dict = dict(st.secrets["gcp_service_account"])
             if "private_key" in secret_dict:
                 secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
             creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
         else:
-            # 2. Kết nối bằng file local khi chạy trên máy tính
+            # 2. Kết nối bằng file cục bộ khi chạy trên máy tính
             creds = Credentials.from_service_account_file("service_account.json", scopes=scopes)
             
         self.client = gspread.authorize(creds)
