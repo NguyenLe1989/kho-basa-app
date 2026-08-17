@@ -3,6 +3,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import streamlit as st
 import json
+import os
 import re
 
 class HeThongKhoBasa:
@@ -13,24 +14,33 @@ class HeThongKhoBasa:
             "https://www.googleapis.com/auth/drive"
         ]
         
-        # 1. Đọc trực tiếp từ Secrets khi chạy trên web Streamlit Cloud
-        if hasattr(st, "secrets") and "gcp_json" in st.secrets:
-            secret_dict = json.loads(st.secrets["gcp_json"])
-            creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
-        elif hasattr(st, "secrets") and "gcp_service_account" in st.secrets:
-            secret_dict = dict(st.secrets["gcp_service_account"])
-            if "private_key" in secret_dict:
-                secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
-            creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
-        else:
-            # 2. Đọc file cục bộ khi chạy thử trên máy tính
+        creds = None
+        
+        # 1. Đọc file cục bộ khi chạy trên máy tính
+        if os.path.exists("service_account.json"):
             creds = Credentials.from_service_account_file("service_account.json", scopes=scopes)
+        else:
+            # 2. Đọc từ Streamlit Secrets khi chạy online
+            try:
+                if "gcp_json" in st.secrets:
+                    secret_dict = json.loads(st.secrets["gcp_json"])
+                    creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
+                elif "gcp_service_account" in st.secrets:
+                    secret_dict = dict(st.secrets["gcp_service_account"])
+                    if "private_key" in secret_dict:
+                        secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
+                    creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
+            except Exception as e:
+                print(f"Lỗi đọc secrets: {e}")
+
+        if not creds:
+            raise Exception("Không tìm thấy thông tin xác thực Google Service Account!")
             
         self.client = gspread.authorize(creds)
         self.doc = self.client.open("KHO_THUY_SAN_BASA")
         self.ton_kho_sheet = self.doc.worksheet("TON_KHO")
         self.log_sheet = self.doc.worksheet("NHAT_KY_NHAP_XUAT")
-        print("✅ Kết nối cơ sở dữ liệu thành công!")
+        print("✅ Kết nối Google Sheet thành công!")
 
     def thuc_thi_lenh(self, cau_lenh):
         cau_lenh_lower = cau_lenh.lower()
@@ -78,16 +88,16 @@ class HeThongKhoBasa:
         tong_nhap = float(vat_tu_match['Tổng Nhập'])
         tong_xuat = float(vat_tu_match['Tổng Xuất'])
         ton_toi_thieu = float(vat_tu_match['Tồn Tối Thiểu'])
-        ton_cuoi_hien_tai = ton_dau + tong_nhap - tong_xuat
+        ton_cuoi_hien_tai = ton_dau + tong_nhap - ton_xuat
 
         if hinh_thuc == "NHAP":
             tong_nhap += so_luong
-            ton_cuoi_moi = ton_dau + tong_nhap - tong_xuat
+            ton_cuoi_moi = ton_dau + tong_nhap - ton_xuat
         else:
             if ton_cuoi_hien_tai < so_luong:
                 return f"⚠️ TỪ CHỐI XUẤT: Trong kho chỉ còn {ton_cuoi_hien_tai} {vat_tu_match['ĐVT']} {vat_tu_match['Tên Mặt Hàng']}."
             tong_xuat += so_luong
-            ton_cuoi_moi = ton_dau + tong_nhap - tong_xuat
+            ton_cuoi_moi = ton_dau + tong_nhap - ton_xuat
 
         trang_thai = "CẢNH BÁO TỒN THẤP" if ton_cuoi_moi <= ton_toi_thieu else "AN TOÀN"
 
