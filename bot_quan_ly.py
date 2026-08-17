@@ -13,9 +13,9 @@ class HeThongKhoBasa:
             "https://www.googleapis.com/auth/drive"
         ]
         
-        # 1. Tự động đọc nguyên bản JSON từ Streamlit Secrets khi chạy Online
-        if hasattr(st, "secrets") and "raw_json" in st.secrets:
-            secret_dict = json.loads(st.secrets["raw_json"])
+        # 1. Đọc trực tiếp từ Secrets khi chạy trên web Streamlit Cloud
+        if hasattr(st, "secrets") and "gcp_json" in st.secrets:
+            secret_dict = json.loads(st.secrets["gcp_json"])
             creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
         elif hasattr(st, "secrets") and "gcp_service_account" in st.secrets:
             secret_dict = dict(st.secrets["gcp_service_account"])
@@ -23,7 +23,7 @@ class HeThongKhoBasa:
                 secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
             creds = Credentials.from_service_account_info(secret_dict, scopes=scopes)
         else:
-            # 2. Kết nối bằng file cục bộ khi chạy trên máy tính
+            # 2. Đọc file cục bộ khi chạy thử trên máy tính
             creds = Credentials.from_service_account_file("service_account.json", scopes=scopes)
             
         self.client = gspread.authorize(creds)
